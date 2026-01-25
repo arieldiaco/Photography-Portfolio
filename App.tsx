@@ -31,6 +31,30 @@ const App: React.FC = () => {
   const [currentHeroPhoto, setCurrentHeroPhoto] = useState<Photo | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
+  // SEO: Dynamic Title Management
+  useEffect(() => {
+    let title = "Ariel Diacovetzky | Photo Journal";
+    switch (view) {
+      case 'gallery':
+        title = "Gallery | Ariel Diacovetzky Photo Journal";
+        break;
+      case 'contact':
+        title = "About & Contact | Ariel Diacovetzky";
+        break;
+      case 'admin':
+        title = "Admin Dashboard | Ariel Diacovetzky";
+        break;
+      case 'home':
+        if (currentHeroPhoto?.dateText) {
+          title = `${currentHeroPhoto.dateText} | Ariel Diacovetzky`;
+        } else {
+          title = "Home | Ariel Diacovetzky Photo Journal";
+        }
+        break;
+    }
+    document.title = title;
+  }, [view, currentHeroPhoto]);
+
   // Persistence Load
   useEffect(() => {
     const loadData = async () => {
@@ -65,7 +89,6 @@ const App: React.FC = () => {
 
   const handleGallerySelect = (index: number) => {
     setView('home');
-    // For a deeper jump-to-index experience, Home component would need an index prop override
   };
 
   const handleHeroPhotoChange = useCallback((photo: Photo) => {
