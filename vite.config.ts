@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   define: {
-    // This ensures process.env.API_KEY is replaced during build with the value from your Netlify dashboard
+    // Ensures the API_KEY environment variable from Netlify is injected into the build
     'process.env.API_KEY': JSON.stringify(process.env.API_KEY)
   },
   server: {
@@ -14,12 +14,6 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true
-      }
-    }
+    minify: 'esbuild', // Using built-in esbuild instead of optional terser
   }
 });
