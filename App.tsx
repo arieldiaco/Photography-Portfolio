@@ -55,14 +55,17 @@ const App: React.FC = () => {
     document.title = title;
   }, [view, currentHeroPhoto]);
 
-  // Persistence Load
+  // Initial Data Fetch
   useEffect(() => {
     const loadData = async () => {
-      const savedPhotos = await getFromDB<Photo[]>(STORAGE_KEY_PHOTOS);
-      const savedContact = await getFromDB<ContactContent>(STORAGE_KEY_CONTACT);
-      const savedAuth = await getFromDB<AdminConfig>(STORAGE_KEY_AUTH);
+      // First attempt: Cloud, Second attempt: Local
+      const [savedPhotos, savedContact, savedAuth] = await Promise.all([
+        getFromDB<Photo[]>(STORAGE_KEY_PHOTOS),
+        getFromDB<ContactContent>(STORAGE_KEY_CONTACT),
+        getFromDB<AdminConfig>(STORAGE_KEY_AUTH)
+      ]);
 
-      if (savedPhotos) setPhotos(savedPhotos);
+      if (savedPhotos && savedPhotos.length > 0) setPhotos(savedPhotos);
       if (savedContact) setContact(savedContact);
       if (savedAuth) setAdminConfig(savedAuth);
       
@@ -71,7 +74,7 @@ const App: React.FC = () => {
     loadData();
   }, []);
 
-  // Persistence Save
+  // Save changes to both Local & Cloud
   useEffect(() => {
     if (!isLoaded) return;
     saveToDB(STORAGE_KEY_PHOTOS, photos);
@@ -89,6 +92,7 @@ const App: React.FC = () => {
 
   const handleGallerySelect = (index: number) => {
     setView('home');
+    // Home component handles the internal index once photos are ready
   };
 
   const handleHeroPhotoChange = useCallback((photo: Photo) => {
@@ -96,7 +100,7 @@ const App: React.FC = () => {
   }, []);
 
   const renderView = () => {
-    if (!isLoaded) return <div className="h-screen flex items-center justify-center bg-zinc-50 font-light text-zinc-400">Loading Journal...</div>;
+    if (!isLoaded) return <div className="h-screen flex items-center justify-center bg-zinc-50 font-light text-zinc-400">Syncing Journal...</div>;
 
     switch (view) {
       case 'gallery':
