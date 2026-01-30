@@ -44,7 +44,6 @@ export const Admin: React.FC<AdminProps> = ({
     if (!cloudStatus.success) return;
     setIsMigrating(true);
     try {
-      // Re-save everything to trigger cloud sync
       await saveToDB('ariel_photos', photos);
       await saveToDB('ariel_contact', contact);
       await saveToDB('ariel_auth', adminConfig);
@@ -150,19 +149,19 @@ export const Admin: React.FC<AdminProps> = ({
             {photos.map((photo, idx) => (
               <div key={photo.id} className="bg-white border border-zinc-200 rounded-2xl p-6 flex flex-col md:flex-row gap-6 hover:shadow-md transition-all">
                 <div className="w-full md:w-40 aspect-square rounded-xl overflow-hidden bg-zinc-100">
-                  <img src={photo.url} className="w-full h-full object-cover" />
+                  <img src={photo.url} className="w-full h-full object-cover" alt="Thumbnail" />
                 </div>
                 <div className="flex-1 space-y-4">
                   <input 
                     className="w-full text-lg font-light outline-none border-b border-transparent focus:border-zinc-200 pb-1"
                     placeholder="Capture Date..."
-                    value={photo.dateText}
+                    value={photo.dateText || ''}
                     onChange={(e) => updatePhoto(photo.id, { dateText: e.target.value })}
                   />
                   <textarea 
                     className="w-full text-sm font-light text-zinc-500 outline-none resize-none h-24 bg-zinc-50 p-3 rounded-lg"
                     placeholder="Tell the story behind this image..."
-                    value={photo.description}
+                    value={photo.description || ''}
                     onChange={(e) => updatePhoto(photo.id, { description: e.target.value })}
                   />
                 </div>
@@ -259,11 +258,12 @@ CREATE POLICY "Public Read/Write" ON site_data FOR ALL USING (true);`}
 
                 <div className="space-y-4">
                   <h4 className="font-semibold flex items-center gap-2"><CheckCircle2 size={18} className="text-zinc-400" /> 3. Update Netlify Environment</h4>
-                  <p className="text-sm text-zinc-500 ml-7">In Netlify, go to <b>Site Settings > Environment Variables</b> and add:</p>
+                  <p className="text-sm text-zinc-500 ml-7">In Netlify, go to <b>Site Settings &gt; Environment Variables</b> and add:</p>
                   <div className="ml-7 grid grid-cols-2 gap-2 text-xs font-mono">
                     <div className="p-2 bg-zinc-100 rounded border border-zinc-200">SUPABASE_URL</div>
                     <div className="p-2 bg-zinc-100 rounded border border-zinc-200">SUPABASE_KEY</div>
                   </div>
+                  <p className="text-xs text-zinc-400 ml-7 italic">Variables found in Supabase under Project Settings &gt; API.</p>
                 </div>
               </div>
             )}
@@ -271,7 +271,6 @@ CREATE POLICY "Public Read/Write" ON site_data FOR ALL USING (true);`}
         </div>
       )}
 
-      {/* Biography and Security Tabs remained simplified and clean as before */}
       {activeTab === 'contact' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12 animate-in fade-in slide-in-from-bottom-2 duration-500">
           <div className="space-y-6">
@@ -290,7 +289,7 @@ CREATE POLICY "Public Read/Write" ON site_data FOR ALL USING (true);`}
             <div className="grid grid-cols-2 gap-5">
               {contact.images.map((img, idx) => (
                 <div key={idx} className="relative aspect-square bg-zinc-100 rounded-xl overflow-hidden border border-zinc-100">
-                   <img src={img} className="w-full h-full object-cover" />
+                   <img src={img} className="w-full h-full object-cover" alt={`Profile ${idx}`} />
                    <button onClick={() => setContact({ ...contact, images: contact.images.filter((_, i) => i !== idx) })} className="absolute top-3 right-3 p-2 bg-red-500 text-white rounded-full"><Trash2 size={16} /></button>
                 </div>
               ))}
@@ -323,7 +322,7 @@ CREATE POLICY "Public Read/Write" ON site_data FOR ALL USING (true);`}
               <div>
                 <label className="block text-sm font-medium text-zinc-500 mb-2">Change Admin Password</label>
                 <div className="relative">
-                  <input type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="New Password" className="w-full pl-11 pr-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl outline-none focus:border-zinc-900" />
+                  <input type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="New Password" title="New Password" className="w-full pl-11 pr-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl outline-none focus:border-zinc-900" />
                   <Key size={18} className="absolute left-4 top-3.5 text-zinc-400" />
                 </div>
               </div>
