@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Trash2, MoveUp, MoveDown, Plus, Image as ImageIcon, 
-  Key, Cloud, CloudOff, Info, ExternalLink, RefreshCcw, CheckCircle2, AlertCircle 
+  Key, Cloud, CloudOff, Info, ExternalLink, RefreshCcw, CheckCircle2, AlertCircle, Code 
 } from 'lucide-react';
 import { Photo, ContactContent, AdminConfig } from '../types';
 import { analyzeImage } from '../services/geminiService';
@@ -25,10 +25,16 @@ export const Admin: React.FC<AdminProps> = ({
   const [activeTab, setActiveTab] = useState<'photos' | 'contact' | 'settings' | 'cloud'>('photos');
   const [newPass, setNewPass] = useState('');
   const [saveStatus, setSaveStatus] = useState('');
-  const [cloudStatus, setCloudStatus] = useState<{ loading: boolean; success: boolean; message: string }>({
+  const [cloudStatus, setCloudStatus] = useState<{ 
+    loading: boolean; 
+    success: boolean; 
+    message: string;
+    debug?: any;
+  }>({
     loading: true, success: false, message: ''
   });
   const [isMigrating, setIsMigrating] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
 
   useEffect(() => {
     checkCloud();
@@ -218,6 +224,42 @@ export const Admin: React.FC<AdminProps> = ({
               </button>
             </div>
 
+            {/* Diagnostic Panel */}
+            {!cloudStatus.success && (
+               <div className="mt-4 p-5 bg-zinc-900 rounded-2xl text-zinc-300">
+                  <div className="flex justify-between items-center mb-4">
+                    <h4 className="text-xs uppercase tracking-widest font-bold flex items-center gap-2">
+                      <Code size={14} /> Diagnostic Console
+                    </h4>
+                    <button onClick={() => setShowDebug(!showDebug)} className="text-[10px] text-zinc-500 hover:text-white underline">
+                      {showDebug ? 'Hide Details' : 'Show Details'}
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-2 text-xs font-mono">
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">SUPABASE_URL:</span>
+                      <span>{cloudStatus.debug?.url || 'UNDETECTED'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">SUPABASE_KEY:</span>
+                      <span className={cloudStatus.debug?.hasKey ? 'text-green-400' : 'text-red-400'}>
+                        {cloudStatus.debug?.hasKey ? 'DETECTED' : 'MISSING'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {showDebug && cloudStatus.debug?.rawError && (
+                    <div className="mt-4 pt-4 border-t border-zinc-800">
+                      <p className="text-[10px] text-zinc-500 mb-1">RAW SERVER ERROR:</p>
+                      <pre className="text-[10px] text-amber-300 bg-black/40 p-3 rounded-lg overflow-x-auto whitespace-pre-wrap">
+                        {JSON.stringify(cloudStatus.debug.rawError, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+               </div>
+            )}
+
             {cloudStatus.success && photos.length > 0 && (
               <div className="mt-8 pt-8 border-t border-green-200/50">
                 <h4 className="font-medium text-green-900 mb-2">Sync Found Local Data</h4>
@@ -234,7 +276,7 @@ export const Admin: React.FC<AdminProps> = ({
             )}
 
             {!cloudStatus.success && (
-              <div className="space-y-8 mt-4 animate-in fade-in duration-700">
+              <div className="space-y-8 mt-8 animate-in fade-in duration-700">
                 <div className="space-y-4">
                   <h4 className="font-semibold flex items-center gap-2"><CheckCircle2 size={18} className="text-zinc-400" /> 1. Create Supabase Account</h4>
                   <p className="text-sm text-zinc-500 ml-7">Sign up for free at <a href="https://supabase.com" target="_blank" className="text-blue-600 underline">supabase.com</a>. Create a project named 'PhotoJournal'.</p>
@@ -250,7 +292,7 @@ export const Admin: React.FC<AdminProps> = ({
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Allow everyone to read and write (simple for portfolio apps)
+-- Allow everyone to read and write
 ALTER TABLE site_data ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public Read/Write" ON site_data FOR ALL USING (true);`}
                   </pre>
@@ -258,12 +300,18 @@ CREATE POLICY "Public Read/Write" ON site_data FOR ALL USING (true);`}
 
                 <div className="space-y-4">
                   <h4 className="font-semibold flex items-center gap-2"><CheckCircle2 size={18} className="text-zinc-400" /> 3. Update Netlify Environment</h4>
-                  <p className="text-sm text-zinc-500 ml-7">In Netlify, go to <b>Site Settings &gt; Environment Variables</b> and add:</p>
-                  <div className="ml-7 grid grid-cols-2 gap-2 text-xs font-mono">
-                    <div className="p-2 bg-zinc-100 rounded border border-zinc-200">SUPABASE_URL</div>
-                    <div className="p-2 bg-zinc-100 rounded border border-zinc-200">SUPABASE_KEY</div>
+                  <p className="text-sm text-zinc-500 ml-7">In Netlify, go to <b>Site Settings &gt; Environment Variables</b> and add these <b>exactly</b>:</p>
+                  <div className="ml-7 grid grid-cols-1 gap-3">
+                    <div className="flex items-center justify-between p-3 bg-zinc-100 rounded border border-zinc-200 text-xs">
+                      <span className="font-mono font-bold">VITE_SUPABASE_URL</span>
+                      <span className="text-zinc-400 text-[10px]">Project URL from Supabase Settings &gt; API</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-zinc-100 rounded border border-zinc-200 text-xs">
+                      <span className="font-mono font-bold">VITE_SUPABASE_KEY</span>
+                      <span className="text-zinc-400 text-[10px]">Project API Key (anon/public) from Supabase</span>
+                    </div>
                   </div>
-                  <p className="text-xs text-zinc-400 ml-7 italic">Variables found in Supabase under Project Settings &gt; API.</p>
+                  <p className="text-xs text-amber-600 ml-7 italic mt-2"><b>IMPORTANT:</b> Variables must start with <b>VITE_</b> or they will not be seen by the app.</p>
                 </div>
               </div>
             )}
@@ -271,6 +319,7 @@ CREATE POLICY "Public Read/Write" ON site_data FOR ALL USING (true);`}
         </div>
       )}
 
+      {/* Biography and Security Tabs remained simplified and clean as before */}
       {activeTab === 'contact' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12 animate-in fade-in slide-in-from-bottom-2 duration-500">
           <div className="space-y-6">
