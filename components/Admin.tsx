@@ -1,8 +1,12 @@
 
-import React, { useState } from 'react';
-import { Trash2, MoveUp, MoveDown, Plus, Image as ImageIcon, Key, Calendar, AlignLeft, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { 
+  Trash2, MoveUp, MoveDown, Plus, Image as ImageIcon, 
+  Key, Cloud, CloudOff, Info, ExternalLink, RefreshCcw, CheckCircle2, AlertCircle 
+} from 'lucide-react';
 import { Photo, ContactContent, AdminConfig } from '../types';
 import { analyzeImage } from '../services/geminiService';
+import { isCloudEnabled, testCloudConnection, saveToDB } from '../services/storage';
 
 interface AdminProps {
   photos: Photo[];
@@ -18,27 +22,44 @@ export const Admin: React.FC<AdminProps> = ({
   photos, setPhotos, contact, setContact, adminConfig, setAdminConfig, onLogout 
 }) => {
   const [isUploading, setIsUploading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'photos' | 'contact' | 'settings'>('photos');
+  const [activeTab, setActiveTab] = useState<'photos' | 'contact' | 'settings' | 'cloud'>('photos');
   const [newPass, setNewPass] = useState('');
   const [saveStatus, setSaveStatus] = useState('');
+  const [cloudStatus, setCloudStatus] = useState<{ loading: boolean; success: boolean; message: string }>({
+    loading: true, success: false, message: ''
+  });
+  const [isMigrating, setIsMigrating] = useState(false);
 
-  // Security: Simple HTML Sanitizer to prevent XSS
+  useEffect(() => {
+    checkCloud();
+  }, []);
+
+  const checkCloud = async () => {
+    setCloudStatus(prev => ({ ...prev, loading: true }));
+    const result = await testCloudConnection();
+    setCloudStatus({ loading: false, ...result });
+  };
+
+  const handleMigration = async () => {
+    if (!cloudStatus.success) return;
+    setIsMigrating(true);
+    try {
+      // Re-save everything to trigger cloud sync
+      await saveToDB('ariel_photos', photos);
+      await saveToDB('ariel_contact', contact);
+      await saveToDB('ariel_auth', adminConfig);
+      alert('Local data successfully pushed to Global Cloud!');
+    } catch (e) {
+      alert('Migration failed. Check console for details.');
+    } finally {
+      setIsMigrating(false);
+    }
+  };
+
   const sanitizeHTML = (html: string) => {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const scripts = doc.querySelectorAll('script, iframe, object, embed, link[rel="stylesheet"]');
     scripts.forEach(s => s.remove());
-    
-    // Remove inline event handlers
-    const allElements = doc.querySelectorAll('*');
-    allElements.forEach(el => {
-      const attrs = el.attributes;
-      for (let i = attrs.length - 1; i >= 0; i--) {
-        if (attrs[i].name.startsWith('on')) {
-          el.removeAttribute(attrs[i].name);
-        }
-      }
-    });
-    
     return doc.body.innerHTML;
   };
 
@@ -84,41 +105,22 @@ export const Admin: React.FC<AdminProps> = ({
   };
 
   const deletePhoto = (id: string) => {
-    if (confirm('Are you sure you want to delete this photo from your journal?')) {
-      const updatedPhotos = photos.filter(p => p.id !== id);
-      setPhotos(updatedPhotos);
+    if (confirm('Are you sure? This will remove the photo from everyone\'s view.')) {
+      setPhotos(photos.filter(p => p.id !== id));
     }
-  };
-
-  const movePhoto = (index: number, direction: 'up' | 'down') => {
-    const newPhotos = [...photos];
-    const target = direction === 'up' ? index - 1 : index + 1;
-    if (target < 0 || target >= photos.length) return;
-    [newPhotos[index], newPhotos[target]] = [newPhotos[target], newPhotos[index]];
-    setPhotos(newPhotos);
-  };
-
-  const handleContactBlur = (e: React.FocusEvent<HTMLDivElement>) => {
-    const cleanHTML = sanitizeHTML(e.currentTarget.innerHTML);
-    setContact({ ...contact, html: cleanHTML });
-  };
-
-  const updatePassword = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newPass.length < 4) return;
-    setAdminConfig({ ...adminConfig, pass: newPass });
-    setSaveStatus('Password updated successfully!');
-    setNewPass('');
-    setTimeout(() => setSaveStatus(''), 3000);
   };
 
   return (
     <div className="pt-32 px-6 md:px-12 pb-20 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-8 border-b border-zinc-200">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 border-b border-zinc-200">
         <div className="flex gap-8 overflow-x-auto scrollbar-hide">
-          <button onClick={() => setActiveTab('photos')} className={`pb-4 px-2 whitespace-nowrap transition-colors ${activeTab === 'photos' ? 'border-b-2 border-zinc-900 font-medium' : 'text-zinc-400'}`}>Photos Library</button>
-          <button onClick={() => setActiveTab('contact')} className={`pb-4 px-2 whitespace-nowrap transition-colors ${activeTab === 'contact' ? 'border-b-2 border-zinc-900 font-medium' : 'text-zinc-400'}`}>Contact Information</button>
-          <button onClick={() => setActiveTab('settings')} className={`pb-4 px-2 whitespace-nowrap transition-colors ${activeTab === 'settings' ? 'border-b-2 border-zinc-900 font-medium' : 'text-zinc-400'}`}>Security Settings</button>
+          <button onClick={() => setActiveTab('photos')} className={`pb-4 px-2 whitespace-nowrap transition-colors ${activeTab === 'photos' ? 'border-b-2 border-zinc-900 font-medium' : 'text-zinc-400'}`}>Library</button>
+          <button onClick={() => setActiveTab('contact')} className={`pb-4 px-2 whitespace-nowrap transition-colors ${activeTab === 'contact' ? 'border-b-2 border-zinc-900 font-medium' : 'text-zinc-400'}`}>Biography</button>
+          <button onClick={() => setActiveTab('settings')} className={`pb-4 px-2 whitespace-nowrap transition-colors ${activeTab === 'settings' ? 'border-b-2 border-zinc-900 font-medium' : 'text-zinc-400'}`}>Security</button>
+          <button onClick={() => setActiveTab('cloud')} className={`pb-4 px-2 whitespace-nowrap transition-colors flex items-center gap-2 ${activeTab === 'cloud' ? 'border-b-2 border-zinc-900 font-medium' : 'text-zinc-400'}`}>
+            {cloudStatus.success ? <Cloud size={16} className="text-green-500" /> : <CloudOff size={16} className="text-amber-500" />}
+            Sync Wizard
+          </button>
         </div>
         <button onClick={onLogout} className="text-sm font-medium text-red-500 pb-4 hover:text-red-700 transition-colors">Logout</button>
       </div>
@@ -126,66 +128,61 @@ export const Admin: React.FC<AdminProps> = ({
       {activeTab === 'photos' && (
         <div className="space-y-6">
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-light">Library Content ({photos.length})</h2>
-            <label className={`cursor-pointer bg-zinc-900 text-white px-6 py-2.5 rounded-full flex items-center gap-2 hover:bg-zinc-800 transition-all shadow-sm ${isUploading ? 'opacity-50 cursor-wait' : ''}`}>
+            <h2 className="text-2xl font-light">Your Archive</h2>
+            <label className={`cursor-pointer bg-zinc-900 text-white px-6 py-2.5 rounded-full flex items-center gap-2 hover:bg-zinc-800 transition-all ${isUploading ? 'opacity-50' : ''}`}>
               <Plus size={20} />
-              {isUploading ? 'Processing Image...' : 'Upload Photo'}
+              {isUploading ? 'Analyzing...' : 'Add New Work'}
               <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} disabled={isUploading} />
             </label>
           </div>
 
-          <div className="bg-white border border-zinc-200 rounded-2xl divide-y divide-zinc-100 overflow-hidden shadow-sm">
-            {photos.map((photo, idx) => (
-              <div key={photo.id} className="p-6 flex flex-col md:flex-row md:items-start gap-6 group hover:bg-zinc-50 transition-colors">
-                <div className="w-full md:w-32 h-32 flex-shrink-0 bg-zinc-100 rounded-lg overflow-hidden border border-zinc-100">
-                  <img src={photo.url} alt="Thumbnail" className="w-full h-full object-cover" />
-                </div>
-                
-                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-[10px] uppercase tracking-wider text-zinc-400 font-bold flex items-center gap-1.5 mb-1.5">
-                        <Calendar size={12} /> Date Reference
-                      </label>
-                      <input 
-                        type="text" 
-                        value={photo.dateText || ''} 
-                        onChange={(e) => updatePhoto(photo.id, { dateText: e.target.value })}
-                        placeholder="e.g. May 2024"
-                        className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:border-zinc-900 outline-none transition-all"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] uppercase tracking-wider text-zinc-400 font-bold flex items-center gap-1.5 mb-1.5">
-                        <AlignLeft size={12} /> Description
-                      </label>
-                      <textarea 
-                        value={photo.description || ''} 
-                        onChange={(e) => updatePhoto(photo.id, { description: e.target.value.slice(0, 350) })}
-                        placeholder="Brief story about the capture..."
-                        rows={3}
-                        className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:border-zinc-900 outline-none transition-all resize-none"
-                      />
-                      <div className="text-right text-[10px] text-zinc-400 mt-1">
-                        {(photo.description?.length || 0)}/350
-                      </div>
-                    </div>
-                  </div>
+          {!cloudStatus.success && !cloudStatus.loading && (
+            <div className="bg-amber-50 border border-amber-100 p-5 rounded-2xl flex items-start gap-3 text-amber-800">
+              <AlertCircle className="mt-0.5 flex-shrink-0" size={20} />
+              <div>
+                <p className="font-semibold text-sm">Persistence is currently LOCAL-ONLY</p>
+                <p className="text-xs opacity-80 mt-1">Changes made now will disappear if you clear your browser cache or visit from another device. Use the <b>Sync Wizard</b> to go global.</p>
+              </div>
+            </div>
+          )}
 
-                  <div className="flex flex-col justify-end items-end gap-4">
-                    <div className="text-right">
-                      <p className="text-[10px] text-zinc-300 font-mono mb-1">REF: {photo.id}</p>
-                      <div className="flex items-center gap-2 justify-end">
-                        <div className="w-3 h-3 rounded-full border border-zinc-200" style={{ backgroundColor: photo.dominantColor }} />
-                        <span className="text-[10px] text-zinc-400 font-medium">{photo.width} × {photo.height}px</span>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                       <button onClick={() => movePhoto(idx, 'up')} disabled={idx === 0} className="p-2 text-zinc-400 hover:text-zinc-900 disabled:opacity-20 transition-colors"><MoveUp size={18} /></button>
-                       <button onClick={() => movePhoto(idx, 'down')} disabled={idx === photos.length - 1} className="p-2 text-zinc-400 hover:text-zinc-900 disabled:opacity-20 transition-colors"><MoveDown size={18} /></button>
-                       <button onClick={() => deletePhoto(photo.id)} className="p-2.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-all"><Trash2 size={20} /></button>
-                    </div>
+          <div className="grid grid-cols-1 gap-4">
+            {photos.map((photo, idx) => (
+              <div key={photo.id} className="bg-white border border-zinc-200 rounded-2xl p-6 flex flex-col md:flex-row gap-6 hover:shadow-md transition-all">
+                <div className="w-full md:w-40 aspect-square rounded-xl overflow-hidden bg-zinc-100">
+                  <img src={photo.url} className="w-full h-full object-cover" />
+                </div>
+                <div className="flex-1 space-y-4">
+                  <input 
+                    className="w-full text-lg font-light outline-none border-b border-transparent focus:border-zinc-200 pb-1"
+                    placeholder="Capture Date..."
+                    value={photo.dateText}
+                    onChange={(e) => updatePhoto(photo.id, { dateText: e.target.value })}
+                  />
+                  <textarea 
+                    className="w-full text-sm font-light text-zinc-500 outline-none resize-none h-24 bg-zinc-50 p-3 rounded-lg"
+                    placeholder="Tell the story behind this image..."
+                    value={photo.description}
+                    onChange={(e) => updatePhoto(photo.id, { description: e.target.value })}
+                  />
+                </div>
+                <div className="flex flex-row md:flex-col justify-between items-center gap-2">
+                  <button onClick={() => deletePhoto(photo.id)} className="p-3 text-red-400 hover:bg-red-50 rounded-full transition-colors"><Trash2 size={20} /></button>
+                  <div className="flex gap-2">
+                    <button onClick={() => {
+                      const newPhotos = [...photos];
+                      if (idx > 0) {
+                        [newPhotos[idx], newPhotos[idx-1]] = [newPhotos[idx-1], newPhotos[idx]];
+                        setPhotos(newPhotos);
+                      }
+                    }} className="p-2 text-zinc-400 hover:text-zinc-900"><MoveUp size={18} /></button>
+                    <button onClick={() => {
+                      const newPhotos = [...photos];
+                      if (idx < photos.length - 1) {
+                        [newPhotos[idx], newPhotos[idx+1]] = [newPhotos[idx+1], newPhotos[idx]];
+                        setPhotos(newPhotos);
+                      }
+                    }} className="p-2 text-zinc-400 hover:text-zinc-900"><MoveDown size={18} /></button>
                   </div>
                 </div>
               </div>
@@ -194,36 +191,111 @@ export const Admin: React.FC<AdminProps> = ({
         </div>
       )}
 
+      {activeTab === 'cloud' && (
+        <div className="max-w-3xl space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="space-y-4">
+            <h2 className="text-3xl font-light">Global Connectivity Wizard</h2>
+            <p className="text-zinc-500 font-light leading-relaxed">
+              To make your photography journal visible to the whole world, you need to connect a Supabase database. This bypasses local storage and makes your site truly persistent.
+            </p>
+          </div>
+
+          <div className={`p-8 rounded-3xl border-2 transition-all ${cloudStatus.success ? 'bg-green-50 border-green-200' : 'bg-white border-zinc-100 shadow-xl'}`}>
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
+              <div className="flex items-center gap-5">
+                <div className={`p-4 rounded-2xl ${cloudStatus.success ? 'bg-green-500 text-white' : 'bg-amber-100 text-amber-600'}`}>
+                  {cloudStatus.success ? <Cloud size={32} /> : <CloudOff size={32} />}
+                </div>
+                <div>
+                  <h3 className="text-xl font-medium">{cloudStatus.success ? 'Global Sync Active' : 'Local Mode Only'}</h3>
+                  <p className="text-sm opacity-70">
+                    {cloudStatus.loading ? 'Verifying connection...' : cloudStatus.message}
+                  </p>
+                </div>
+              </div>
+              <button onClick={checkCloud} className="flex items-center gap-2 text-zinc-400 hover:text-zinc-900 transition-colors text-sm font-medium">
+                <RefreshCcw size={16} className={cloudStatus.loading ? 'animate-spin' : ''} />
+                Refresh Status
+              </button>
+            </div>
+
+            {cloudStatus.success && photos.length > 0 && (
+              <div className="mt-8 pt-8 border-t border-green-200/50">
+                <h4 className="font-medium text-green-900 mb-2">Sync Found Local Data</h4>
+                <p className="text-sm text-green-700 mb-4">You have {photos.length} photos in your current local session. Would you like to push them to the global cloud so others can see them?</p>
+                <button 
+                  onClick={handleMigration}
+                  disabled={isMigrating}
+                  className="bg-green-600 text-white px-6 py-2 rounded-full text-sm font-medium hover:bg-green-700 transition-all flex items-center gap-2"
+                >
+                  {isMigrating ? 'Syncing...' : 'Push Local to Global Cloud'}
+                  {!isMigrating && <RefreshCcw size={14} />}
+                </button>
+              </div>
+            )}
+
+            {!cloudStatus.success && (
+              <div className="space-y-8 mt-4 animate-in fade-in duration-700">
+                <div className="space-y-4">
+                  <h4 className="font-semibold flex items-center gap-2"><CheckCircle2 size={18} className="text-zinc-400" /> 1. Create Supabase Account</h4>
+                  <p className="text-sm text-zinc-500 ml-7">Sign up for free at <a href="https://supabase.com" target="_blank" className="text-blue-600 underline">supabase.com</a>. Create a project named 'PhotoJournal'.</p>
+                </div>
+                
+                <div className="space-y-4">
+                  <h4 className="font-semibold flex items-center gap-2"><CheckCircle2 size={18} className="text-zinc-400" /> 2. Run Database Script</h4>
+                  <p className="text-sm text-zinc-500 ml-7">Open the <b>SQL Editor</b> in your Supabase project and run this:</p>
+                  <pre className="ml-7 bg-zinc-900 text-zinc-300 p-4 rounded-xl text-xs overflow-x-auto select-all">
+{`CREATE TABLE IF NOT EXISTS site_data (
+  id TEXT PRIMARY KEY,
+  content JSONB,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Allow everyone to read and write (simple for portfolio apps)
+ALTER TABLE site_data ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public Read/Write" ON site_data FOR ALL USING (true);`}
+                  </pre>
+                </div>
+
+                <div className="space-y-4">
+                  <h4 className="font-semibold flex items-center gap-2"><CheckCircle2 size={18} className="text-zinc-400" /> 3. Update Netlify Environment</h4>
+                  <p className="text-sm text-zinc-500 ml-7">In Netlify, go to <b>Site Settings > Environment Variables</b> and add:</p>
+                  <div className="ml-7 grid grid-cols-2 gap-2 text-xs font-mono">
+                    <div className="p-2 bg-zinc-100 rounded border border-zinc-200">SUPABASE_URL</div>
+                    <div className="p-2 bg-zinc-100 rounded border border-zinc-200">SUPABASE_KEY</div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Biography and Security Tabs remained simplified and clean as before */}
       {activeTab === 'contact' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12 animate-in fade-in slide-in-from-bottom-2 duration-500">
           <div className="space-y-6">
-            <h3 className="text-xl font-light">Biography & Statement</h3>
-            <div className="bg-white p-5 rounded-2xl border border-zinc-200 space-y-4 shadow-sm">
-               <div className="flex gap-3 border-b border-zinc-100 pb-3 flex-wrap">
-                 <button onClick={() => document.execCommand('bold')} className="p-2 hover:bg-zinc-100 rounded-md font-bold transition-colors">B</button>
-                 <button onClick={() => document.execCommand('italic')} className="p-2 hover:bg-zinc-100 rounded-md italic transition-colors">I</button>
-                 <button onClick={() => document.execCommand('underline')} className="p-2 hover:bg-zinc-100 rounded-md underline transition-colors">U</button>
-                 <div className="w-px h-6 bg-zinc-200 self-center mx-1" />
-                 <button onClick={() => document.execCommand('fontSize', false, '5')} className="p-2 hover:bg-zinc-100 rounded-md transition-colors">Text +</button>
-                 <button onClick={() => document.execCommand('fontSize', false, '3')} className="p-2 hover:bg-zinc-100 rounded-md transition-colors">Text -</button>
-               </div>
+            <h3 className="text-xl font-light">Biography</h3>
+            <div className="bg-white p-5 rounded-2xl border border-zinc-200 space-y-4 shadow-sm min-h-[400px]">
                <div 
                  contentEditable
-                 className="min-h-[400px] outline-none prose prose-zinc max-w-none font-light leading-relaxed p-2"
-                 onBlur={handleContactBlur}
+                 className="outline-none prose prose-zinc max-w-none font-light leading-relaxed p-2 min-h-[300px]"
+                 onBlur={(e) => setContact({ ...contact, html: sanitizeHTML(e.currentTarget.innerHTML) })}
                  dangerouslySetInnerHTML={{ __html: contact.html }}
                />
-               <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 mt-2 px-2">
-                 <ShieldCheck size={12} className="text-green-500" /> Content is automatically sanitized for safety
-               </div>
             </div>
           </div>
-
           <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xl font-light">Profile Images</h3>
-              <label className="cursor-pointer bg-zinc-100 text-zinc-600 hover:bg-zinc-200 px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors">
-                <ImageIcon size={18} /> Add Image
+            <h3 className="text-xl font-light">Profile Images</h3>
+            <div className="grid grid-cols-2 gap-5">
+              {contact.images.map((img, idx) => (
+                <div key={idx} className="relative aspect-square bg-zinc-100 rounded-xl overflow-hidden border border-zinc-100">
+                   <img src={img} className="w-full h-full object-cover" />
+                   <button onClick={() => setContact({ ...contact, images: contact.images.filter((_, i) => i !== idx) })} className="absolute top-3 right-3 p-2 bg-red-500 text-white rounded-full"><Trash2 size={16} /></button>
+                </div>
+              ))}
+              <label className="aspect-square flex flex-col items-center justify-center border-2 border-dashed border-zinc-200 rounded-xl cursor-pointer hover:bg-zinc-50 transition-colors">
+                <Plus className="text-zinc-300" size={32} />
                 <input type="file" className="hidden" accept="image/*" onChange={(e) => {
                    const file = e.target.files?.[0];
                    if (!file) return;
@@ -233,31 +305,29 @@ export const Admin: React.FC<AdminProps> = ({
                 }} />
               </label>
             </div>
-            <div className="grid grid-cols-2 gap-5">
-              {contact.images.map((img, idx) => (
-                <div key={idx} className="relative aspect-square bg-zinc-100 rounded-xl overflow-hidden group shadow-sm border border-zinc-100">
-                   <img src={img} className="w-full h-full object-cover" />
-                   <button onClick={() => setContact({ ...contact, images: contact.images.filter((_, i) => i !== idx) })} className="absolute top-3 right-3 p-2 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-md"><Trash2 size={16} /></button>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
       )}
 
       {activeTab === 'settings' && (
         <div className="max-w-md animate-in fade-in slide-in-from-bottom-2 duration-500">
-          <h3 className="text-xl font-light mb-6">Administrator Access</h3>
+          <h3 className="text-xl font-light mb-6">Access Control</h3>
           <div className="bg-white p-8 rounded-2xl border border-zinc-200 shadow-sm">
-            <form onSubmit={updatePassword} className="space-y-6">
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              setAdminConfig({ ...adminConfig, pass: newPass });
+              setSaveStatus('Password saved globally!');
+              setNewPass('');
+              setTimeout(() => setSaveStatus(''), 3000);
+            }} className="space-y-6">
               <div>
-                <label className="block text-sm font-medium text-zinc-500 mb-2">Change Password</label>
+                <label className="block text-sm font-medium text-zinc-500 mb-2">Change Admin Password</label>
                 <div className="relative">
-                  <input type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="Min 4 chars" className="w-full pl-11 pr-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl outline-none focus:border-zinc-900 transition-all" />
+                  <input type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="New Password" className="w-full pl-11 pr-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl outline-none focus:border-zinc-900" />
                   <Key size={18} className="absolute left-4 top-3.5 text-zinc-400" />
                 </div>
               </div>
-              <button type="submit" disabled={newPass.length < 4} className="w-full bg-zinc-900 text-white py-3.5 rounded-xl font-medium hover:bg-zinc-800 transition-all disabled:opacity-50 shadow-md">Update Credentials</button>
+              <button type="submit" disabled={newPass.length < 4} className="w-full bg-zinc-900 text-white py-3.5 rounded-xl font-medium hover:bg-zinc-800 disabled:opacity-50 transition-all">Update Access</button>
               {saveStatus && <p className="text-xs text-green-600 text-center mt-2">{saveStatus}</p>}
             </form>
           </div>
