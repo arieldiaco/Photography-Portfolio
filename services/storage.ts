@@ -2,10 +2,20 @@
 import { createClient } from '@supabase/supabase-js';
 import { Photo, ContactContent, AdminConfig } from '../types';
 
-// Vite handles these as literal replacements during build.
-// We check both VITE_ prefixed (Netlify standard) and non-prefixed (Vite define)
-const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL || (window as any).process?.env?.SUPABASE_URL || '';
-const supabaseKey = (import.meta as any).env?.VITE_SUPABASE_KEY || (window as any).process?.env?.SUPABASE_KEY || '';
+// Helper to find variables across different injection methods (Vite, Netlify, process.env)
+const findEnvVar = (key: string): string => {
+  const viteKey = `VITE_${key}`;
+  return (
+    (import.meta as any).env?.[viteKey] || 
+    (import.meta as any).env?.[key] || 
+    (window as any).process?.env?.[viteKey] ||
+    (window as any).process?.env?.[key] ||
+    ''
+  );
+};
+
+const supabaseUrl = findEnvVar('SUPABASE_URL');
+const supabaseKey = findEnvVar('SUPABASE_KEY');
 
 // Initialize Supabase only if keys exist
 export const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
@@ -78,28 +88,28 @@ export async function testCloudConnection(): Promise<{
   debug?: { url: string; hasKey: boolean; rawError?: any } 
 }> {
   const debugInfo = {
-    url: supabaseUrl ? `${supabaseUrl.substring(0, 15)}...` : 'MISSING',
+    url: supabaseUrl ? `${supabaseUrl.substring(0, 15)}...` : 'UNDETECTED',
     hasKey: !!supabaseKey,
   };
 
   if (!supabaseUrl || !supabaseKey) {
     return { 
       success: false, 
-      message: "Keys are missing in the environment. Ensure you added VITE_SUPABASE_URL and VITE_SUPABASE_KEY in Netlify.",
+      message: "Keys are not detected in the browser session.",
       debug: debugInfo
     };
   }
   
   if (!supabase) {
-    return { success: false, message: "Supabase client failed to initialize with provided keys.", debug: debugInfo };
+    return { success: false, message: "Client failed initialization.", debug: debugInfo };
   }
 
   try {
-    const { error, data } = await supabase.from('site_data').select('id').limit(1);
+    const { error } = await supabase.from('site_data').select('id').limit(1);
     if (error) {
       return { 
         success: false, 
-        message: `Database Error: ${error.message}`, 
+        message: `Database connection failed: ${error.message}`, 
         debug: { ...debugInfo, rawError: error } 
       };
     }
@@ -107,7 +117,7 @@ export async function testCloudConnection(): Promise<{
   } catch (e: any) {
     return { 
       success: false, 
-      message: `System Error: ${e.message || "Network Error"}`, 
+      message: `Network/System Error: ${e.message || "Unknown"}`, 
       debug: { ...debugInfo, rawError: e } 
     };
   }
