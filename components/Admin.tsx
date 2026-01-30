@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Trash2, MoveUp, MoveDown, Plus, Image as ImageIcon, 
-  Key, Cloud, CloudOff, Info, ExternalLink, RefreshCcw, CheckCircle2, AlertCircle, Code 
+  Key, Cloud, CloudOff, Info, ExternalLink, RefreshCcw, CheckCircle2, AlertCircle, Code, Rocket
 } from 'lucide-react';
 import { Photo, ContactContent, AdminConfig } from '../types';
 import { analyzeImage } from '../services/geminiService';
@@ -239,7 +239,7 @@ export const Admin: React.FC<AdminProps> = ({
                   <div className="space-y-2 text-xs font-mono">
                     <div className="flex justify-between">
                       <span className="text-zinc-500">SUPABASE_URL:</span>
-                      <span>{cloudStatus.debug?.url || 'UNDETECTED'}</span>
+                      <span className={cloudStatus.debug?.url === 'UNDETECTED' ? 'text-red-400' : 'text-green-400'}>{cloudStatus.debug?.url || 'UNDETECTED'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-zinc-500">SUPABASE_KEY:</span>
@@ -248,6 +248,18 @@ export const Admin: React.FC<AdminProps> = ({
                       </span>
                     </div>
                   </div>
+
+                  {(!cloudStatus.debug?.hasKey || cloudStatus.debug?.url === 'UNDETECTED') && (
+                    <div className="mt-6 p-4 bg-amber-900/20 border border-amber-900/30 rounded-xl flex items-start gap-3">
+                      <Rocket size={18} className="text-amber-500 mt-1 shrink-0" />
+                      <div>
+                        <p className="text-xs font-bold text-amber-400">Netlify Deployment Required</p>
+                        <p className="text-[10px] text-amber-300/70 mt-1 leading-relaxed">
+                          Environment variables are baked into your site during the build process. If you just added them in Netlify, you MUST go to your <b>Netlify Deploys</b> tab and click <b>Trigger Deploy &gt; Clear Cache and Deploy Site</b> for them to become visible here.
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {showDebug && cloudStatus.debug?.rawError && (
                     <div className="mt-4 pt-4 border-t border-zinc-800">
